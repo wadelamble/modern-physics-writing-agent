@@ -298,7 +298,7 @@ Now let's play a game and start adding more slits.
 
 [Open MP4: symmetry-many-slit-paths-phasors-interference.mp4](../../content/drafts/animations/symmetry-many-slit-paths-phasors-interference.mp4)
 
-As the path deviates more from a straight, minimum length path, it has a greater first-order change in phase. \(This is the common result from calculus that near a function's minimum, there is no change to the value of the function in the first order of the argument\). Thus, as we can see from the tip-to-tail diagram, the change in value from A to B is dominated by paths near the minimum length path. This results in the interfeence pattern (this is wrong revisit.)
+As the path deviates more from a straight, minimum length path, it has a greater first-order change in phase. \(This is the common result from calculus that near a function's minimum, there is no change to the value of the function in the first order of the argument\). Thus, as we can see from the tip-to-tail diagram, the change in magntiude from A to B is dominated by paths near the minimum length. The larger the tip-to-tail sum the larger the magnitude and thus "brighter" the spot on the projection screen is. Taken together, this is the wave's interference patten, and the procedure we've developed is used to calculate it.
 ...........
 Now what if we add another screen with two slits? What if we add two more slits to each of the two downstream screens?
 
