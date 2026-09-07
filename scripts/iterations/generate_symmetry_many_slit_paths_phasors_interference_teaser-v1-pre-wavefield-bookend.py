@@ -18,7 +18,7 @@ NAME = "symmetry-many-slit-paths-phasors-interference-teaser"
 WIDTH = 1080
 HEIGHT = 1920
 FPS = 30
-DURATION = 17.0
+DURATION = 15.0
 
 # High-pop black reel palette.
 BG_TOP = (2, 2, 4)
@@ -29,41 +29,18 @@ FAINT = (113, 39, 76)
 CYAN = (70, 190, 255)
 GOLD = (255, 137, 68)
 GREEN = (54, 224, 145)
-WAVE_POSITIVE = np.asarray((255.0, 42.0, 91.0))
-WAVE_NEGATIVE = np.asarray((37.0, 137.0, 255.0))
-WAVE_NEUTRAL = np.asarray((3.0, 3.0, 8.0))
 
 # Reel-safe vertical layout. Important information stays above the area usually
 # covered by social-app captions and playback controls.
 ROUTE_TITLE_Y = 135
 ROUTE_PROGRESS_Y = 57
-ROUTE_A = (245.0, 450.0)
-ROUTE_SCREEN_X = 540.0
-ROUTE_DETECTOR_X = 835.0
-ROUTE_TOP = 240.0
-ROUTE_BOTTOM = 660.0
+ROUTE_A = (86.0, 467.0)
+ROUTE_SCREEN_X = 526.0
+ROUTE_DETECTOR_X = 985.0
+ROUTE_TOP = 286.0
+ROUTE_BOTTOM = 647.0
 ROUTE_CENTER_Y = (ROUTE_TOP + ROUTE_BOTTOM) / 2.0
 ROUTE_Y_SCALE = (ROUTE_BOTTOM - ROUTE_TOP) / (2.0 * model.DETECTOR_HALF_HEIGHT)
-
-# Equal on-screen x/y scale keeps the wavefronts circular.  The source,
-# barrier, and detector retain the model's physical positions -4.5, 0, +4.5.
-# The extra 0.9 units left of the source keep its circular field visible, while
-# the right edge ends exactly at the projection screen.
-WAVE_WORLD_X_MIN = -5.4
-WAVE_WORLD_X_MAX = model.DETECTOR_DISTANCE
-WAVE_WORLD_Y_MIN = -model.DETECTOR_HALF_HEIGHT
-WAVE_WORLD_Y_MAX = model.DETECTOR_HALF_HEIGHT
-WAVE_FIELD_LEFT = 186
-WAVE_FIELD_TOP = round(ROUTE_TOP)
-WAVE_FIELD_WIDTH = 650
-WAVE_FIELD_HEIGHT = round(ROUTE_BOTTOM - ROUTE_TOP)
-WAVE_PERIOD = 3.0
-
-# A fixed, monotone display map makes the true transmitted-side modulation
-# unmistakable without moving any phase fronts or nodes.  Raising magnitude to
-# this power darkens destructive bands; the fixed gain restores the brightest
-# constructive bands.  Neither value changes from frame to frame.
-TRANSMITTED_CONTRAST_POWER = 6.0
 
 PHASOR_TITLE_Y = 735
 PHASOR_BOUNDS = (78.0, 807.0, 1002.0, 1247.0)
@@ -89,13 +66,13 @@ DETECTOR_INTENSITY_FLOOR = float(model.DETECTOR_INTENSITIES.min())
 DETECTOR_DISPLAY_GAMMA = 2.0
 
 # A 15-second cut with the explanatory motion retained and idle time removed.
-INTRO_END = 1.5
-SLOW_BUILD_END = 3.2
-BUILD_END = 6.8
-CENTER_HOLD_END = 7.9
-MOVE_TO_TOP_END = 8.8
-SCAN_END = 14.6
-SETTLE_END = 15.3
+INTRO_END = 0.5
+SLOW_BUILD_END = 2.2
+BUILD_END = 5.8
+CENTER_HOLD_END = 6.9
+MOVE_TO_TOP_END = 7.8
+SCAN_END = 13.6
+SETTLE_END = 14.3
 
 
 def font(size: int, bold: bool = False):
@@ -135,12 +112,6 @@ def lerp(start: float, end: float, amount: float) -> float:
     return start + (end - start) * amount
 
 
-def detector_display_amount(intensity: float) -> float:
-    intensity_span = max(1e-12, model.MAX_INTENSITY - DETECTOR_INTENSITY_FLOOR)
-    normalized = clamp01((intensity - DETECTOR_INTENSITY_FLOOR) / intensity_span)
-    return normalized**DETECTOR_DISPLAY_GAMMA
-
-
 def draw_text(
     draw: ImageDraw.ImageDraw,
     point: tuple[float, float],
@@ -163,76 +134,6 @@ def make_background() -> Image.Image:
 
 
 BACKGROUND = make_background()
-
-
-def compute_route_wave_field() -> np.ndarray:
-    x_values = np.linspace(WAVE_WORLD_X_MIN, WAVE_WORLD_X_MAX, WAVE_FIELD_WIDTH)
-    y_values = np.linspace(WAVE_WORLD_Y_MAX, WAVE_WORLD_Y_MIN, WAVE_FIELD_HEIGHT)
-    xx, yy = np.meshgrid(x_values, y_values)
-
-    source_radius = np.hypot(xx + model.SOURCE_DISTANCE, yy)
-    source_radius_soft = np.sqrt(source_radius**2 + 0.06**2)
-    source_ramp = 1.0 - np.exp(-((source_radius / 0.14) ** 2))
-    incident = (
-        source_ramp
-        * np.exp(1j * model.WAVE_NUMBER * source_radius)
-        / np.sqrt(source_radius_soft)
-    )
-
-    transmitted = np.zeros_like(xx, dtype=np.complex128)
-    available_transmitted_amplitude = np.zeros_like(xx)
-    opening_spacing = abs(float(model.OPENING_YS[1] - model.OPENING_YS[0]))
-    for opening_y in model.OPENING_YS:
-        opening_y = float(opening_y)
-        source_to_opening = math.hypot(model.SOURCE_DISTANCE, opening_y)
-        opening_to_point = np.hypot(xx, yy - opening_y)
-        opening_to_point_soft = np.sqrt(opening_to_point**2 + 0.07**2)
-        spreading = opening_spacing / np.sqrt(
-            source_to_opening * opening_to_point_soft
-        )
-        transmitted += spreading * np.exp(
-            1j
-            * model.WAVE_NUMBER
-            * (source_to_opening + opening_to_point)
-        )
-        available_transmitted_amplitude += spreading
-
-    left_mask = (xx < 0.0) & (source_radius > 0.18)
-    right_mask = xx > 0.08
-    incident /= max(float(np.percentile(np.abs(incident[left_mask]), 98.5)), 1e-12)
-    transmitted_magnitude = np.abs(transmitted)
-    transmitted_direction = transmitted / np.maximum(transmitted_magnitude, 1e-12)
-    coherence = transmitted_magnitude / np.maximum(
-        available_transmitted_amplitude,
-        1e-12,
-    )
-    coherence_scale = max(float(np.percentile(coherence[right_mask], 99.0)), 1e-12)
-    transmitted_display_magnitude = np.clip(coherence / coherence_scale, 0.0, 1.0)
-    transmitted_display_magnitude **= TRANSMITTED_CONTRAST_POWER
-    transmitted_display = transmitted_direction * transmitted_display_magnitude
-    return np.where(xx < 0.0, incident, transmitted_display)
-
-
-ROUTE_WAVE_FIELD = compute_route_wave_field()
-
-
-def route_wave_field_image(seconds: float) -> Image.Image:
-    phase = 2.0 * math.pi * seconds / WAVE_PERIOD
-    values = np.real(ROUTE_WAVE_FIELD * np.exp(-1j * phase))
-    normalized = np.clip(values, -1.0, 1.0)
-    strength = np.abs(normalized) ** 0.72
-    target = np.where((normalized >= 0.0)[..., None], WAVE_POSITIVE, WAVE_NEGATIVE)
-    rgb = WAVE_NEUTRAL + (target - WAVE_NEUTRAL) * strength[..., None]
-    return Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8), mode="RGB").convert("RGBA")
-
-
-def draw_route_wave_field(image: Image.Image, seconds: float, opacity: float) -> None:
-    opacity = clamp01(opacity)
-    if opacity <= 0.0:
-        return
-    field = route_wave_field_image(seconds)
-    field.putalpha(round(255 * opacity))
-    image.alpha_composite(field, dest=(WAVE_FIELD_LEFT, WAVE_FIELD_TOP))
 
 
 def route_y(value: float) -> float:
@@ -335,22 +236,6 @@ def draw_route(
     draw.line((*middle, *partial), fill=fill, width=width)
 
 
-def composite_layer_with_opacity(
-    image: Image.Image,
-    layer: Image.Image,
-    opacity: float,
-) -> None:
-    opacity = clamp01(opacity)
-    if opacity <= 0.0:
-        return
-    if opacity < 1.0:
-        alpha = layer.getchannel("A").point(
-            lambda value: round(value * opacity)
-        )
-        layer.putalpha(alpha)
-    image.alpha_composite(layer)
-
-
 def make_phasor_mapper():
     values: list[complex] = [0j]
     for b_value in np.linspace(model.DETECTOR_HALF_HEIGHT, -model.DETECTOR_HALF_HEIGHT, 121):
@@ -381,32 +266,20 @@ def draw_dividers(draw: ImageDraw.ImageDraw) -> None:
 
 
 def draw_routes(
-    image: Image.Image,
+    draw: ImageDraw.ImageDraw,
     b_value: float,
     completed_count: int,
     active_index: int | None,
     active_fraction: float,
     complete: bool,
-    path_opacity: float = 1.0,
 ) -> None:
-    draw = ImageDraw.Draw(image, "RGBA")
     draw_text(draw, (55, ROUTE_TITLE_Y), "Accumulate phase along each path", font_obj=SECTION)
 
     contributions = model.build_contributions(b_value)
     count = model.OPENING_COUNT if complete else completed_count
-    path_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    path_draw = ImageDraw.Draw(path_layer, "RGBA")
     for index in range(count):
-        draw_route(
-            path_draw,
-            contributions[index].opening_y,
-            b_value,
-            CYAN,
-            3,
-        )
-    composite_layer_with_opacity(image, path_layer, path_opacity)
+        draw_route(draw, contributions[index].opening_y, b_value, rgba(CYAN, 0.19), 3)
 
-    draw = ImageDraw.Draw(image, "RGBA")
     draw.line(
         (ROUTE_SCREEN_X, ROUTE_TOP, ROUTE_SCREEN_X, ROUTE_BOTTOM),
         fill=rgba(INK, 0.88),
@@ -437,43 +310,18 @@ def draw_routes(
             contributions[index].opening_y - model.stationary_opening_y(b_value)
         ),
     )
-    highlight_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    highlight_draw = ImageDraw.Draw(highlight_layer, "RGBA")
     if complete:
         stationary = contributions[stationary_index]
-        draw_route(
-            highlight_draw,
-            stationary.opening_y,
-            b_value,
-            GOLD,
-            7,
-        )
-        draw_circle(
-            highlight_draw,
-            (ROUTE_SCREEN_X, route_y(stationary.opening_y)),
-            7.0,
-            GOLD,
-        )
+        draw_route(draw, stationary.opening_y, b_value, rgba(GOLD, 0.96), 7)
+        draw_circle(draw, (ROUTE_SCREEN_X, route_y(stationary.opening_y)), 7.0, GOLD)
 
     if active_index is not None:
         active = contributions[active_index]
         eased_fraction = smootherstep(active_fraction)
-        draw_route(
-            highlight_draw,
-            active.opening_y,
-            b_value,
-            GOLD,
-            7,
-            eased_fraction,
-        )
-        draw_circle(
-            highlight_draw,
-            (ROUTE_SCREEN_X, route_y(active.opening_y)),
-            7.0,
-            GOLD,
-        )
+        draw_route(draw, active.opening_y, b_value, GOLD, 7, eased_fraction)
+        draw_circle(draw, (ROUTE_SCREEN_X, route_y(active.opening_y)), 7.0, GOLD)
         draw_text(
-            highlight_draw,
+            draw,
             (1018, ROUTE_PROGRESS_Y),
             f"{active_index + 1} / 49",
             fill=GOLD,
@@ -481,18 +329,8 @@ def draw_routes(
             anchor="ra",
         )
     elif complete:
-        draw_text(
-            highlight_draw,
-            (1018, ROUTE_PROGRESS_Y),
-            "all 49",
-            fill=GREEN,
-            font_obj=LABEL_BOLD,
-            anchor="ra",
-        )
+        draw_text(draw, (1018, ROUTE_PROGRESS_Y), "all 49", fill=GREEN, font_obj=LABEL_BOLD, anchor="ra")
 
-    composite_layer_with_opacity(image, highlight_layer, path_opacity)
-
-    draw = ImageDraw.Draw(image, "RGBA")
     draw_circle(draw, ROUTE_A, 9.0, INK)
     draw_text(draw, (ROUTE_A[0] + 18, ROUTE_A[1]), "A", font_obj=LABEL_BOLD, anchor="lm")
 
@@ -566,7 +404,9 @@ def draw_phasors(
 
 
 def detector_intensity_x(intensity: float) -> float:
-    amount = detector_display_amount(intensity)
+    intensity_span = max(1e-12, model.MAX_INTENSITY - DETECTOR_INTENSITY_FLOOR)
+    normalized = clamp01((intensity - DETECTOR_INTENSITY_FLOOR) / intensity_span)
+    amount = normalized**DETECTOR_DISPLAY_GAMMA
     return DETECTOR_TRACE_MIN_X + amount * (DETECTOR_TRACE_MAX_X - DETECTOR_TRACE_MIN_X)
 
 
@@ -664,40 +504,10 @@ def draw_frame(frame: int) -> Image.Image:
         scanning,
     ) = animation_state(seconds)
 
-    if seconds < INTRO_END:
-        initial_field_opacity = 1.0
-    elif seconds < BUILD_END:
-        initial_field_opacity = 1.0 - smootherstep(
-            (seconds - INTRO_END) / (BUILD_END - INTRO_END)
-        )
-    else:
-        initial_field_opacity = 0.0
-
-    bookend_opacity = (
-        smootherstep(
-            (seconds - SCAN_END)
-            / ((DURATION - 1.0) - SCAN_END)
-        )
-        if seconds >= SCAN_END
-        else 0.0
-    )
-    field_opacity = max(initial_field_opacity, bookend_opacity)
-    path_opacity = 1.0 - bookend_opacity
-
     image = BACKGROUND.copy()
-    draw_route_wave_field(image, seconds, field_opacity)
     draw = ImageDraw.Draw(image, "RGBA")
     draw_dividers(draw)
-    draw_routes(
-        image,
-        b_value,
-        completed_count,
-        active_index,
-        active_fraction,
-        complete,
-        path_opacity,
-    )
-    draw = ImageDraw.Draw(image, "RGBA")
+    draw_routes(draw, b_value, completed_count, active_index, active_fraction, complete)
     current_total = draw_phasors(draw, b_value, completed_count, active_index, active_fraction, complete)
     draw_detector(
         draw,
@@ -778,7 +588,7 @@ def encode() -> tuple[Path, Path, Path]:
 
     draw_frame(round(DURATION * FPS) - 1).save(final_still)
 
-    samples = (0.2, 2.5, 6.7, 8.3, 12.0, 15.6)
+    samples = (0.2, 1.5, 5.7, 7.3, 11.0, 14.6)
     thumb_width = 180
     thumb_height = 320
     margin = 18
